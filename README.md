@@ -43,11 +43,16 @@ def reports(admin: AdminAuthContext):
 
 ### Environment variables
 
-| Var | Purpose | Default (dev only) |
+| Var | Purpose | Default |
 |---|---|---|
-| `ADMIN_JWT_SECRET` | HS256 signing key. **Set this in production.** | `pamfilico-admin-jwt-devenv-insecure` |
-| `ADMIN_USERNAME` | Login username | `theadmin` |
-| `ADMIN_PASSWORD` | Login password | `thepassword` |
+| `ADMIN_JWT_SECRET` | HS256 signing key. **Set this in production.** | dev-only fallback (with warning) |
+| `ADMIN_USERNAME` | Login username | **unset → login disabled** |
+| `ADMIN_PASSWORD` | Login password | **unset → login disabled** |
+
+If either `ADMIN_USERNAME` or `ADMIN_PASSWORD` is unset, the `POST /admin/login`
+route responds `401 "Admin login is not configured"` — there are no baked-in
+credentials. Apps that want a local dev default should set the env vars in
+their local `.env` or pass an explicit `AdminAuthConfig(default_username=..., default_password=...)`.
 
 Override via `AdminAuthConfig(jwt_secret_env="MY_SECRET", token_header="MY-APP-ADMIN-TOKEN", ...)`
 when an app already uses app-specific names (e.g. tourfast's `TOURFAST_ADMIN_TOKEN`).

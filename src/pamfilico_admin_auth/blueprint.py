@@ -38,11 +38,15 @@ def build_admin_blueprint(
     get_db_session: Callable[[], Any],
     config: AdminAuthConfig = DEFAULT_CONFIG,
     user_serializer: Optional[Schema] = None,
-    url_prefix: str = "/admin",
     name: str = "pamfilico_admin_auth",
 ) -> Blueprint:
     """
-    Build a Flask Blueprint with ``POST /login`` and ``GET /users``.
+    Build a Flask Blueprint exposing ``POST /login`` and ``GET /users``.
+
+    The blueprint has **no internal url_prefix** — the caller decides the mount point
+    via ``app.register_blueprint(bp, url_prefix="/api/v1/admin")``. This matches
+    Flask's convention and avoids the "blueprint self-prefix vs. register_blueprint
+    prefix" override footgun.
 
     Args:
         user_model: SQLAlchemy model class for users (must expose ``id``, ``email``,
@@ -52,10 +56,9 @@ def build_admin_blueprint(
         config: ``AdminAuthConfig`` controlling env var names / header / TTL.
         user_serializer: Optional Marshmallow ``Schema`` instance to serialize user
             rows. Defaults to :class:`DefaultAdminUserListItemSchema`.
-        url_prefix: Mount point for the blueprint (default ``/admin``).
         name: Blueprint name (default ``pamfilico_admin_auth``).
     """
-    bp = Blueprint(name, __name__, url_prefix=url_prefix)
+    bp = Blueprint(name, __name__)
     serializer = user_serializer or DefaultAdminUserListItemSchema()
 
     @bp.route("/login", methods=["POST"])
@@ -71,6 +74,15 @@ def build_admin_blueprint(
             )
         u = admin_login_username(config)
         p = admin_login_password(config)
+        # Fail closed when credentials are unconfigured — never accept an empty-string
+        # login, even if the payload also sent empty strings.
+        if not u or not p:
+            return standard_response(
+                data=None,
+                error=True,
+                ui_message="Admin login is not configured",
+                status_code=401,
+            )
         if not (
             _timing_safe_equal(payload["username"], u)
             and _timing_safe_equal(payload["password"], p)

@@ -71,7 +71,7 @@ def health():
 
 app.register_blueprint(
     build_admin_blueprint(user_model=User, get_db_session=Session),
-    url_prefix="/api/v1",
+    url_prefix="/api/v1/admin",
 )
 
 seed_db()
