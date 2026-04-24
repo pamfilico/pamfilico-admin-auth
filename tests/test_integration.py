@@ -57,8 +57,7 @@ def test_login_bad_credentials():
         json={"username": "theadmin", "password": "wrong"},
     )
     assert r.status_code == 401
-    body = r.json()
-    assert body["error"] is True
+    assert r.json()["error"] is True
 
 
 @integration_required
@@ -67,69 +66,40 @@ def test_login_missing_fields():
     assert r.status_code == 400
 
 
-# ---- protected: /admin/users ----
+# ---- @admin_authenticate end-to-end ----
 
 
 @integration_required
-def test_users_without_token_is_401():
-    r = requests.get(f"{API_URL}/api/v1/admin/users")
+def test_protected_without_token_is_401():
+    r = requests.get(f"{API_URL}/api/v1/admin/whoami")
     assert r.status_code == 401
 
 
 @integration_required
-def test_users_with_invalid_token_is_401():
+def test_protected_with_invalid_token_is_401():
     r = requests.get(
-        f"{API_URL}/api/v1/admin/users", headers={"ADMIN-TOKEN": "garbage"}
+        f"{API_URL}/api/v1/admin/whoami", headers={"ADMIN-TOKEN": "garbage"}
     )
     assert r.status_code == 401
 
 
 @integration_required
-def test_users_list_default_pagination():
+def test_protected_with_valid_admin_token_header():
     token = _admin_token()
     r = requests.get(
-        f"{API_URL}/api/v1/admin/users", headers={"ADMIN-TOKEN": token}
+        f"{API_URL}/api/v1/admin/whoami", headers={"ADMIN-TOKEN": token}
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["error"] is False
-    assert len(body["data"]) == 4
-    assert body["pagination"]["currentPage"] == 1
-    assert body["pagination"]["totalCount"] == 4
+    assert body["data"]["sub"] == "theadmin"
+    assert body["data"]["role"] == "admin"
 
 
 @integration_required
-def test_users_list_with_page_size():
+def test_protected_with_bearer_header():
     token = _admin_token()
     r = requests.get(
-        f"{API_URL}/api/v1/admin/users?currentPage=1&pageSize=2",
-        headers={"ADMIN-TOKEN": token},
-    )
-    body = r.json()
-    assert len(body["data"]) == 2
-    assert body["pagination"]["pageSize"] == 2
-    assert body["pagination"]["totalPages"] == 2
-    assert body["pagination"]["nextPage"] == 2
-
-
-@integration_required
-def test_users_list_email_contains_filter():
-    token = _admin_token()
-    r = requests.get(
-        f"{API_URL}/api/v1/admin/users?email_contains=example.com",
-        headers={"ADMIN-TOKEN": token},
-    )
-    body = r.json()
-    emails = {u["email"] for u in body["data"]}
-    assert "alice@example.com" in emails
-    assert "dave@elsewhere.org" not in emails
-
-
-@integration_required
-def test_users_list_bearer_header_works():
-    token = _admin_token()
-    r = requests.get(
-        f"{API_URL}/api/v1/admin/users",
+        f"{API_URL}/api/v1/admin/whoami",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 200

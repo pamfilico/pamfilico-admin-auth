@@ -58,6 +58,8 @@ export async function adminFetch<T = unknown>(
 }
 
 // ---------- typed helpers ----------
+// Only auth-related endpoints live here. App-specific admin calls (users, broadcasts,
+// reports, etc.) belong in the consuming app — use `adminFetch` directly for those.
 
 export async function adminLogin(
   cfg: AdminApiConfig,
@@ -67,28 +69,4 @@ export async function adminLogin(
     method: "POST",
     body: JSON.stringify(body),
   });
-}
-
-export interface AdminListUsersParams {
-  currentPage?: number;
-  pageSize?: number;
-  email_contains?: string;
-}
-
-export async function adminListUsers(
-  cfg: AdminApiConfig,
-  token: string,
-  params: AdminListUsersParams = {},
-) {
-  const sp = new URLSearchParams();
-  if (params.currentPage != null) sp.set("currentPage", String(params.currentPage));
-  if (params.pageSize != null) sp.set("pageSize", String(params.pageSize));
-  if (params.email_contains) sp.set("email_contains", params.email_contains);
-  const q = sp.toString();
-  return adminFetch(
-    cfg,
-    `/admin/users${q ? `?${q}` : ""}`,
-    { method: "GET" },
-    token,
-  );
 }

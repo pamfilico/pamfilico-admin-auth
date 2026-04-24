@@ -5,29 +5,31 @@ import { useEffect, useState } from "react";
 
 import {
   AdminProtectedRoute,
-  adminListUsers,
+  adminFetch,
   useAdminAuth,
 } from "@pamfilico/admin-auth-react";
 
-interface UserRow {
-  id: string;
-  email: string | null;
-  name: string | null;
-  created_at: string | null;
+interface WhoamiData {
+  sub: string;
+  role: string;
 }
 
-function UsersInner() {
+function WhoamiInner() {
   const { token, logout, apiConfig } = useAdminAuth();
   const router = useRouter();
-  const [rows, setRows] = useState<UserRow[]>([]);
+  const [me, setMe] = useState<WhoamiData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
-      const r = await adminListUsers(apiConfig, token, { pageSize: 50 });
-      const body = r.data as { data?: UserRow[] } | undefined;
-      setRows(body?.data ?? []);
+      const r = await adminFetch<{ data?: WhoamiData }>(
+        apiConfig,
+        "/admin/whoami",
+        { method: "GET" },
+        token,
+      );
+      setMe(r.data?.data ?? null);
       setLoading(false);
     })();
   }, [token, apiConfig]);
@@ -42,7 +44,7 @@ function UsersInner() {
           marginBottom: 16,
         }}
       >
-        <h1 style={{ margin: 0 }}>Admin users</h1>
+        <h1 style={{ margin: 0 }}>Admin — whoami</h1>
         <button
           data-testid="admin-logout"
           onClick={() => {
@@ -57,24 +59,12 @@ function UsersInner() {
       {loading ? (
         <div>Loading…</div>
       ) : (
-        <table data-testid="admin-users-table" style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th>Email</th>
-              <th>Name</th>
-              <th>Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td>{u.email}</td>
-                <td>{u.name}</td>
-                <td>{u.created_at}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <pre
+          data-testid="admin-whoami"
+          style={{ background: "#f6f6f6", padding: 16, borderRadius: 4 }}
+        >
+          {JSON.stringify(me, null, 2)}
+        </pre>
       )}
     </div>
   );
@@ -83,8 +73,11 @@ function UsersInner() {
 export default function AdminUsersPage() {
   const router = useRouter();
   return (
-    <AdminProtectedRoute redirect={(path) => router.replace(path)} fallback={<div>Checking auth…</div>}>
-      <UsersInner />
+    <AdminProtectedRoute
+      redirect={(path) => router.replace(path)}
+      fallback={<div>Checking auth…</div>}
+    >
+      <WhoamiInner />
     </AdminProtectedRoute>
   );
 }

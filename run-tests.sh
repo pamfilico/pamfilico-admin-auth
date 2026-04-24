@@ -6,23 +6,13 @@ cd "$(dirname "$0")"
 
 FRONTEND_FLAG="${RUN_FRONTEND:-0}"
 
-COMPOSE_SERVICES="db api"
+COMPOSE_SERVICES="api"
 if [ "$FRONTEND_FLAG" = "1" ]; then
-  COMPOSE_SERVICES="db api frontend"
+  COMPOSE_SERVICES="api frontend"
 fi
 
 echo "Starting test stack ($COMPOSE_SERVICES)..."
 docker compose -f docker-compose.test.yml up -d --build $COMPOSE_SERVICES
-
-echo "Waiting for PostgreSQL..."
-for i in {1..30}; do
-  if docker compose -f docker-compose.test.yml exec -T db pg_isready -U test -d testdb 2>/dev/null; then
-    echo "PostgreSQL ready."
-    break
-  fi
-  [ $i -eq 30 ] && { echo "PostgreSQL failed."; docker compose -f docker-compose.test.yml down; exit 1; }
-  sleep 1
-done
 
 echo "Waiting for API..."
 for i in {1..30}; do

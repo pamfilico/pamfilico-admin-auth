@@ -14,13 +14,8 @@ export {
   adminHeaders,
   adminFetch,
   adminLogin,
-  adminListUsers,
 } from "./fetch";
-export type {
-  AdminApiConfig,
-  AdminResponse,
-  AdminListUsersParams,
-} from "./fetch";
+export type { AdminApiConfig, AdminResponse } from "./fetch";
 
 export { AdminAuthProvider, useAdminAuth } from "./provider";
 export type { AdminAuthProviderProps } from "./provider";

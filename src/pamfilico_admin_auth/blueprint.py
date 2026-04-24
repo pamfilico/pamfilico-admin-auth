@@ -1,27 +1,24 @@
-"""Factory that builds a Flask Blueprint with /admin/login + /admin/users routes."""
+"""Factory that builds a Flask Blueprint with just the admin login route.
+
+Auth only. User management (listing, filtering, pagination, etc.) is app-specific
+and stays in the consuming app — that's why this blueprint takes no user model and
+no DB session.
+"""
 
 import secrets
-from typing import Any, Callable, Optional, Type
 
 from flask import Blueprint, request
-from marshmallow import Schema, ValidationError
+from marshmallow import ValidationError
 from pamfilico_flask_core import standard_response
 
 from pamfilico_admin_auth.config import DEFAULT_CONFIG, AdminAuthConfig
-from pamfilico_admin_auth.decorators import AdminAuthContext, admin_authenticate
 from pamfilico_admin_auth.jwt import (
     AdminJwtClaims,
     admin_login_password,
     admin_login_username,
     create_admin_jwt,
 )
-from pamfilico_admin_auth.repository import AdminUserRepository
-from pamfilico_admin_auth.schemas import (
-    AdminLoginDataSchema,
-    AdminLoginLoadSchema,
-    AdminUserListQuerySchema,
-    DefaultAdminUserListItemSchema,
-)
+from pamfilico_admin_auth.schemas import AdminLoginDataSchema, AdminLoginLoadSchema
 
 
 def _timing_safe_equal(a: str, b: str) -> bool:
@@ -34,32 +31,23 @@ def _timing_safe_equal(a: str, b: str) -> bool:
 
 
 def build_admin_blueprint(
-    user_model: Type[Any],
-    get_db_session: Callable[[], Any],
     config: AdminAuthConfig = DEFAULT_CONFIG,
-    user_serializer: Optional[Schema] = None,
     name: str = "pamfilico_admin_auth",
 ) -> Blueprint:
     """
-    Build a Flask Blueprint exposing ``POST /login`` and ``GET /users``.
+    Build a Flask Blueprint exposing just ``POST /login``.
 
-    The blueprint has **no internal url_prefix** — the caller decides the mount point
-    via ``app.register_blueprint(bp, url_prefix="/api/v1/admin")``. This matches
-    Flask's convention and avoids the "blueprint self-prefix vs. register_blueprint
-    prefix" override footgun.
+    The blueprint has **no internal url_prefix** — the caller picks the mount point
+    via ``app.register_blueprint(bp, url_prefix="/api/v1/admin")``.
 
     Args:
-        user_model: SQLAlchemy model class for users (must expose ``id``, ``email``,
-            ``created_at`` and ``last_updated`` columns).
-        get_db_session: Callable returning a fresh SQLAlchemy ``Session``. The
-            blueprint closes the session after each request.
         config: ``AdminAuthConfig`` controlling env var names / header / TTL.
-        user_serializer: Optional Marshmallow ``Schema`` instance to serialize user
-            rows. Defaults to :class:`DefaultAdminUserListItemSchema`.
         name: Blueprint name (default ``pamfilico_admin_auth``).
+
+    The caller is responsible for any app-specific admin endpoints (user listing,
+    email broadcasts, metrics, etc.). Protect those with ``@admin_authenticate``.
     """
     bp = Blueprint(name, __name__)
-    serializer = user_serializer or DefaultAdminUserListItemSchema()
 
     @bp.route("/login", methods=["POST"])
     def admin_login():
@@ -102,41 +90,5 @@ def build_admin_blueprint(
             }
         )
         return standard_response(data=data, ui_message="OK")
-
-    @bp.route("/users", methods=["GET"])
-    @admin_authenticate(config=config)
-    def admin_list_users(admin: AdminAuthContext):
-        try:
-            q = AdminUserListQuerySchema().load(
-                {
-                    "currentPage": int(request.args.get("currentPage", 1) or 1),
-                    "pageSize": int(request.args.get("pageSize", 20) or 20),
-                    "email_contains": request.args.get("email_contains", "") or "",
-                }
-            )
-        except (ValidationError, ValueError) as e:
-            err_data = e.messages if isinstance(e, ValidationError) else str(e)
-            return standard_response(
-                data=err_data,
-                error=True,
-                ui_message="Invalid query",
-                status_code=400,
-            )
-        session = get_db_session()
-        try:
-            repo = AdminUserRepository(session, user_model)
-            rows, pagination = repo.paginate(
-                current_page=q["currentPage"],
-                page_size=q["pageSize"],
-                email_contains=q.get("email_contains") or "",
-            )
-            data = (
-                serializer.dump(rows, many=True)
-                if hasattr(serializer, "dump")
-                else [serializer(r) for r in rows]
-            )
-            return standard_response(data=data, pagination=pagination, ui_message="OK")
-        finally:
-            session.close()
 
     return bp

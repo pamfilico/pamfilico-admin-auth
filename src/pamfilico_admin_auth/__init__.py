@@ -1,4 +1,10 @@
-"""pamfilico-admin-auth - HS256 JWT admin auth for Flask + React apps."""
+"""pamfilico-admin-auth - HS256 JWT admin auth for Flask + React apps.
+
+Scope: authentication primitives only. Login route, JWT helpers, the
+``@admin_authenticate`` decorator. User management / admin CRUD / broadcast and
+other admin features are the consuming app's responsibility — protect them with
+the decorator and wire them up however fits.
+"""
 
 from pamfilico_admin_auth.config import AdminAuthConfig
 from pamfilico_admin_auth.jwt import (

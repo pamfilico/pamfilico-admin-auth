@@ -1,15 +1,19 @@
 # pamfilico-admin-auth
 
-Reusable admin auth for Pamfilico apps. Provides:
+**Scope: admin authentication. Not user management.** Login route + JWT verification +
+a Flask decorator + React primitives. User lists, admin CRUD, dashboards — those are
+the consuming app's job; protect them with `@admin_authenticate` and move on.
 
-- **Python / Flask** — `@admin_authenticate` decorator + `build_admin_blueprint`
-  factory. HS256 JWT, credentials from env vars, no admin DB table required.
+- **Python / Flask** — `@admin_authenticate` decorator, `build_admin_blueprint`
+  (exposes `POST /login` only), JWT helpers. Depends on
+  [`pamfilico-flask-core`](https://github.com/pamfilico/flask-core) for the response
+  envelope and error handlers.
 - **React / Next.js** — `<AdminAuthProvider>`, `useAdminAuth()`,
-  `<AdminProtectedRoute>`, typed `adminLogin` / `adminListUsers` helpers.
+  `<AdminProtectedRoute>`, `adminFetch`, pluggable `sessionStorage` /
+  `localStorage` token adapters.
 
-Extracted from the near-identical admin auth flows in bugbeamio, carfast, tourfast and
-boatfast. Depends on [`pamfilico-flask-core`](https://github.com/pamfilico/flask-core)
-for the response envelope and error handlers.
+Extracted from the near-identical admin auth flows in bugbeamio, carfast, tourfast
+and boatfast.
 
 ## Quickstart — Backend
 
@@ -19,50 +23,44 @@ from flask import Flask
 from pamfilico_flask_core import init_errors
 from pamfilico_admin_auth import build_admin_blueprint
 
-from app.database.engine import DBsession   # your sessionmaker
-from app.database.models import User        # your User model
-
 app = Flask(__name__)
 init_errors(app)
-
-app.register_blueprint(
-    build_admin_blueprint(user_model=User, get_db_session=DBsession),
-    url_prefix="/api/v1",
-)
+app.register_blueprint(build_admin_blueprint(), url_prefix="/api/v1/admin")
 ```
 
 ```python
-# Any protected route
+# any app-specific protected route
 from pamfilico_admin_auth import admin_authenticate, AdminAuthContext
 
-@app.route("/api/v1/admin/reports")
+@app.route("/api/v1/admin/users")
 @admin_authenticate
-def reports(admin: AdminAuthContext):
-    return {"sub": admin["sub"]}
+def list_users(admin: AdminAuthContext):
+    # your app, your model, your serializer
+    ...
 ```
 
 ### Environment variables
 
 | Var | Purpose | Default |
 |---|---|---|
-| `ADMIN_JWT_SECRET` | HS256 signing key. **Set this in production.** | dev-only fallback (with warning) |
+| `ADMIN_JWT_SECRET` | HS256 signing key. **Set in production.** | dev-only fallback (with warning) |
 | `ADMIN_USERNAME` | Login username | **unset → login disabled** |
 | `ADMIN_PASSWORD` | Login password | **unset → login disabled** |
 
-If either `ADMIN_USERNAME` or `ADMIN_PASSWORD` is unset, the `POST /admin/login`
-route responds `401 "Admin login is not configured"` — there are no baked-in
-credentials. Apps that want a local dev default should set the env vars in
-their local `.env` or pass an explicit `AdminAuthConfig(default_username=..., default_password=...)`.
+No baked-in credentials: `POST /admin/login` returns
+`401 "Admin login is not configured"` when either env var is unset. Dev-mode
+defaults are opt-in via `AdminAuthConfig(default_username=..., default_password=...)`.
 
-Override via `AdminAuthConfig(jwt_secret_env="MY_SECRET", token_header="MY-APP-ADMIN-TOKEN", ...)`
-when an app already uses app-specific names (e.g. tourfast's `TOURFAST_ADMIN_TOKEN`).
-
-### Routes registered by `build_admin_blueprint`
-
-- `POST /admin/login` — body `{username, password}` → `{data: {accessToken, tokenType, expiresIn}}`
-- `GET  /admin/users?currentPage=1&pageSize=20&email_contains=` — paginated user list (protected)
+Override env var names, token header, or TTL via `AdminAuthConfig` — useful for
+tourfast's `TOURFAST_ADMIN_TOKEN` or apps that already ship a `JWT_SECRET_KEY`.
 
 ## Quickstart — Frontend (React / Next.js)
+
+Install:
+
+```bash
+npm install github:pamfilico/pamfilico-admin-auth
+```
 
 ```tsx
 // app/admin/layout.tsx
@@ -93,7 +91,7 @@ export default function Login() {
     <form onSubmit={async (e) => {
       e.preventDefault();
       const r = await login(u, p);
-      if (r.ok) router.replace("/admin/users");
+      if (r.ok) router.replace("/admin");
     }}>
       <input value={u} onChange={(e) => setU(e.target.value)} />
       <input value={p} onChange={(e) => setP(e.target.value)} type="password" />
@@ -103,8 +101,9 @@ export default function Login() {
 }
 ```
 
-Swap `sessionStorageAdapter` for `localStorageAdapter` (both exported) to persist the
-token across tab reopen.
+Use `adminFetch(apiConfig, path, init, token)` for any protected admin endpoint the
+app defines. Swap `sessionStorageAdapter` for `localStorageAdapter` to persist across
+tab reopen.
 
 ## Tests
 
@@ -116,7 +115,7 @@ host-runnable unit tests.
 poetry install
 poetry run pytest tests/test_jwt.py tests/test_decorator.py -v
 
-# Full integration (docker compose: Postgres + Flask test backend)
+# Full integration (docker compose: just the Flask test backend)
 ./run-tests.sh
 
 # Also boot the Next.js test frontend (for manual browser testing / Playwright)
@@ -127,12 +126,14 @@ RUN_FRONTEND=1 ./run-tests.sh
 
 ```
 pamfilico-admin-auth/
-├── src/pamfilico_admin_auth/   # Python package
+├── src/pamfilico_admin_auth/   # Python package (auth only)
 ├── js/                         # @pamfilico/admin-auth-react source
 ├── tests/                      # pytest (unit + HTTP integration)
 ├── test-frontend/              # minimal Next.js demo app
+├── package.json                # npm manifest at root → installable via github:
+├── tsconfig.json               # tsc builds js/src → js/dist (runs on install via prepare)
 ├── Dockerfile.test             # test backend image
-├── docker-compose.test.yml     # db + api (+ optional frontend)
+├── docker-compose.test.yml     # api (+ optional frontend)
 └── run-tests.sh                # orchestrator
 ```
 

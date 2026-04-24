@@ -1,4 +1,4 @@
-"""Unit tests: @admin_authenticate decorator behavior against a minimal Flask app."""
+"""Unit tests: @admin_authenticate decorator + build_admin_blueprint login route."""
 
 import pytest
 from flask import Flask
@@ -12,44 +12,6 @@ from pamfilico_admin_auth import (
     build_admin_blueprint,
     create_admin_jwt,
 )
-
-
-class _FakeUser:
-    __tablename__ = "users"
-    id = None
-    email = None
-    created_at = None
-    last_updated = None
-
-
-class _FakeSession:
-    def __call__(self):
-        return self
-
-    def query(self, *_args, **_kw):
-        class _Q:
-            def filter(self, *_a, **_k):
-                return self
-
-            def order_by(self, *_a, **_k):
-                return self
-
-            def offset(self, *_a, **_k):
-                return self
-
-            def limit(self, *_a, **_k):
-                return self
-
-            def count(self):
-                return 0
-
-            def all(self):
-                return []
-
-        return _Q()
-
-    def close(self):
-        pass
 
 
 @pytest.fixture
@@ -107,19 +69,23 @@ def test_valid_token_authorization_bearer_header(client):
     assert resp.get_json()["sub"] == "theadmin"
 
 
+# ---- build_admin_blueprint (login-only) ----
+
+
+def _mount_login_app(config: AdminAuthConfig = None) -> Flask:
+    app = Flask(__name__)
+    init_errors(app)
+    bp = build_admin_blueprint(config=config) if config else build_admin_blueprint()
+    app.register_blueprint(bp, url_prefix="/api/v1/admin")
+    return app
+
+
 def test_login_disabled_when_credentials_unset(monkeypatch):
     """No baked-in defaults: login must 401 when env vars are blank."""
     monkeypatch.delenv("ADMIN_USERNAME", raising=False)
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
 
-    app = Flask(__name__)
-    init_errors(app)
-    app.register_blueprint(
-        build_admin_blueprint(user_model=_FakeUser, get_db_session=_FakeSession()),
-        url_prefix="/api/v1/admin",
-    )
-
-    resp = app.test_client().post(
+    resp = _mount_login_app().test_client().post(
         "/api/v1/admin/login", json={"username": "", "password": ""}
     )
     assert resp.status_code == 401
@@ -128,23 +94,24 @@ def test_login_disabled_when_credentials_unset(monkeypatch):
 
 def test_login_works_with_explicit_config_defaults(monkeypatch):
     """Apps can opt into local-dev defaults via AdminAuthConfig, never from the package."""
-    # Conftest sets ADMIN_USERNAME / ADMIN_PASSWORD; clear them so the config defaults
-    # are what actually get used here.
     monkeypatch.delenv("ADMIN_USERNAME", raising=False)
     monkeypatch.delenv("ADMIN_PASSWORD", raising=False)
     cfg = AdminAuthConfig(default_username="devadmin", default_password="devpass")
 
-    app = Flask(__name__)
-    init_errors(app)
-    app.register_blueprint(
-        build_admin_blueprint(
-            user_model=_FakeUser, get_db_session=_FakeSession(), config=cfg
-        ),
-        url_prefix="/api/v1/admin",
-    )
-
-    resp = app.test_client().post(
+    resp = _mount_login_app(cfg).test_client().post(
         "/api/v1/admin/login", json={"username": "devadmin", "password": "devpass"}
     )
     assert resp.status_code == 200
     assert resp.get_json()["data"]["accessToken"]
+
+
+def test_login_bad_credentials_returns_401():
+    resp = _mount_login_app().test_client().post(
+        "/api/v1/admin/login", json={"username": "theadmin", "password": "wrong"}
+    )
+    assert resp.status_code == 401
+
+
+def test_login_missing_fields_returns_400():
+    resp = _mount_login_app().test_client().post("/api/v1/admin/login", json={})
+    assert resp.status_code == 400
