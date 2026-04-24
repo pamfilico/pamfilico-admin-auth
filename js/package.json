@@ -1,0 +1,33 @@
+{
+  "name": "@pamfilico/admin-auth-react",
+  "version": "0.1.0",
+  "description": "React helpers (token storage + fetch wrapper + AdminAuthProvider) for pamfilico-admin-auth",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "pamfilico",
+    "admin",
+    "auth",
+    "jwt",
+    "react",
+    "nextjs"
+  ],
+  "license": "MIT"
+}

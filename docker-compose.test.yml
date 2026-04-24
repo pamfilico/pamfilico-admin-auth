@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5498:5432"
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: testdb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d testdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "5098:5000"
+    environment:
+      - DATABASE_URL=postgresql://test:test@db:5432/testdb
+      - ADMIN_JWT_SECRET=test-secret-for-admin-auth
+      - ADMIN_USERNAME=theadmin
+      - ADMIN_PASSWORD=thepassword
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build:
+      context: .
+      dockerfile: test-frontend/Dockerfile
+    ports:
+      - "3098:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5098
+    depends_on:
+      api:
+        condition: service_healthy
